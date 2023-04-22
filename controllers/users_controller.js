@@ -1,126 +1,120 @@
-const passport = require('passport');
 const User = require('../models/user');
+const fs = require('fs');
+const path = require('path');
 
-module.exports.profile = function(req , res){
-   return res.render('user_profile',{
-      title : 'User Profile',
-      
-   })
-}
+// let's keep it same as before
+module.exports.profile = function(req, res){
+    User.findById(req.params.id, function(err, user){
+        return res.render('user_profile', {
+            title: 'User Profile',
+            profile_user: user
+        });
+    });
 
-module.exports.sign_in = function(req,res){
-   // this is written so that once the user sign in it will not able to go back to sign in page again 
-   if(req.isAuthenticated()){
-      return res.redirect('/users/profile')
-   }
-   return res.render('user_sign_in',{
-      title : "Codeial | Sign In"
-   });
-}
-
-module.exports.sign_up = function(req,res){
-   // this is written so that once the user sign in it will not able to go back to sign up page again 
-   if(req.isAuthenticated()){
-      return res.redirect('/users/profile')
-   }
-   return res.render('user_sign_up',{
-      title : "Codeial | Sign Up"
-   });
-}
-
-// creating a user using form data if password wrong redirect to back 
-// elif the data match and user not present in db then creating a new user 
-
-module.exports.create = function(req,res){
-    if(req.body.password != req.body.confirm_password){
-      return req.redirect('back');
-    }
-    User.findOne({email : req.body.email} , function(err , user){
-      if(err){console.log('error in finding user in signing up'); return }
-      if(!user){
-         // crating user in database
-
-         User.create(req.body , function(err , user){
-
-            if(err){console.log('error in creating user '); return }
-
-            return res.redirect('/users/sign-in')
-         })
-      }
-      else{
-         return res.redirect('back')
-      }
-
-    })
-
-   
-}
- 
-// this is the authentication done with the help of passport local 
-
-module.exports.createSession = function(req , res){
-   return res.redirect('/');
-} 
-
-module.exports.destroySession = function(req , res ){
-   req.logout(function(err){
-      console.log(err);
-   })
-   return res.redirect('/');
 }
 
 
-// this is for manual authentication part leaving the master branch of the project i.e local brach 
 
-// module.exports.profile = function(req ,res){
-//    if(req.cookies.user_id){
-//       User.findById(req.cookies.user_id , function(err , user){
-//          // if(err){return}
-//          if(user){
-//             return res.render('user_profile',{
-//                title:"user",
-//                user : user
-//             });
+module.exports.update = async function(req, res){
+    // if(req.user.id == req.params.id){
+    //     User.findByIdAndUpdate(req.params.id, req.body, function(err, user){
+    //         return res.redirect('back');
+    //     });
+    // }else{
+    //     return res.status(401).send('Unauthorized');
+    // }
+
+    if(req.user.id == req.params.id){
+        try {
             
-//          }
-//          return res.redirect('/users/sign-in');
+            let user = await User.findById(req.params.id);
+            User.uploadedAvatar(req , res , function(err){
+                if(err){console.log('%%%% multer %%',err)}
+                user.name = req.body.name
+                user.email = req.body.email
+                if(req.file){
+                    if(user.avatar && fs.existsSync(path.join(__dirname,'..',user.avatar))){
+                       
+                        fs.unlinkSync(path.join(__dirname,'..',user.avatar));
+                    }
+                    user.avatar = User.avatarPath + '/' + req.file.filename ;
+                    console.log('this is avatar name ',user.avatar);
+                }
+                user.save();
+                return res.redirect('back');
+            });
+        } catch (error) {
+           
+            req.flash('error',error)
+            return res.redirect('back');
+        }
+    }else{
+        return res.status(401).send('Unauthorized');
+    }
+    
+}
 
-//       });
-//    }else{
-//       return res.redirect('/users/sign-in')
 
-//    }  
-// }
+// render the sign up page
+module.exports.signUp = function(req, res){
+    if (req.isAuthenticated()){
+        return res.redirect('/users/profile');
+    }
 
-// module.exports.createSession= function(req , res){
-//    // steps to authenticate 
 
-//    // find the user
-//    User.findOne({email: req.body.email},function(err , user){
-//       if(err){console.log('error in finding user'); return }
+    return res.render('user_sign_up', {
+        title: "Codeial | Sign Up"
+    })
+}
 
-//       // handle user found
-//       if(user){
-//          if(user.password != req.body.password){
-//             return res.redirect('back');
-//          }
 
-//          // handle session creation 
+// render the sign in page
+module.exports.signIn = function(req, res){
 
-//          res.cookie('user_id',user.id);
-//          return res.redirect('/users/profile');
+    if (req.isAuthenticated()){
+        return res.redirect('/users/profile');
+    }
+    return res.render('user_sign_in', {
+        title: "Codeial | Sign In"
+    })
+}
 
-//       }else{
-//          return res.redirect('back');
-//       }
-//    })
-   
+// get the sign up data
+module.exports.create = function(req, res){
+    if (req.body.password != req.body.confirm_password){
+        return res.redirect('back');
+    }
 
-// }
-// module.exports.endSession = function(req,res){
-//    if(req.body.submit){
-//       return res.redirect('/users/sign-in');
-//    }
+    User.findOne({email: req.body.email}, function(err, user){
+        if(err){console.log('error in finding user in signing up'); return}
 
-// }
+        if (!user){
+            User.create(req.body, function(err, user){
+                if(err){console.log('error in creating user while signing up'); return}
 
+                return res.redirect('/users/sign-in');
+            })
+        }else{
+            return res.redirect('back');
+        }
+
+    });
+}
+
+
+// sign in and create a session for the user
+module.exports.createSession = function(req, res){
+    req.flash('success','logged in successfully')
+    return res.redirect('/');
+}
+
+module.exports.destroySession = function(req, res){
+    
+    req.logout(function(err){
+        console.log(err);
+    });
+    req.flash('success','logged out successfully');
+    
+
+    return res.redirect('/');
+}
